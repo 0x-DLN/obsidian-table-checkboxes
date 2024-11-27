@@ -7,7 +7,7 @@ These issues will eventually be worked on. For now, try these known workarounds.
 
 ### Markdown to HTML Checkbox Conversion not Working
 
-[GitHub Issue](https://github.com/DylanGiesberts/obsidian-table-checkboxes/issues/18)
+[GitHub Issue](https://github.com/DylanGiesberts/obsidian-table-checkboxes/issues/11)
 
 Manually typed checkboxes `- [ ] ` might not be converted to their HTML equivalent.
 
@@ -20,7 +20,7 @@ Paste the string below in the cell you want to add the checkbox to and make sure
 
 ### Checkboxes Show as HTML when Togelling in Preview Mode
 
-[GitHub Issue](https://github.com/DylanGiesberts/obsidian-table-checkboxes/issues/11)
+[GitHub Issue](https://github.com/DylanGiesberts/obsidian-table-checkboxes/issues/15)
 
 When trying to check/uncheck a checkbox in Preview Mode, the HTML code for the checkbox shows up instead of toggeling the checkbox state.
 
