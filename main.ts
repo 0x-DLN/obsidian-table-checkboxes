@@ -1,14 +1,44 @@
 import { Editor, EditorPosition, Plugin, TFile, WorkspaceWindow } from 'obsidian';
+import { TableCheckboxesPluginSettingsTab } from 'settings';
+
+
+interface TableCheckboxesPluginSettings {
+  convertCheckboxesOutsideTables: boolean;
+}
+
+const DEFAULT_SETTINGS: TableCheckboxesPluginSettings = {
+  convertCheckboxesOutsideTables: false,
+}
 
 export default class TableCheckboxesPlugin extends Plugin {
+
+  settings: TableCheckboxesPluginSettings;
+
 	async onload() {
 		this.app.workspace.on("window-open", this.setupWindowHandlers);
 		this.setupWindowHandlers(undefined as never, activeWindow);
+    await this.loadSettings();
+    this.addCommand({
+      id: "convert-checkboxes",
+      name: "Convert all checkboxes in the current file to HTML checkboxes",
+      callback: () => {
+        this.convertAllCheckboxes();
+      }
+    });
+    this.addSettingTab(new TableCheckboxesPluginSettingsTab(this.app, this));
 	}
 
 	async onunload() {
 		this.app.workspace.off("window-open", this.setupWindowHandlers);
 	}
+
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
+
+  async saveSettings() {
+    await this.saveData(this.settings);
+  }
 
 	private setupWindowHandlers = (_workspaceWindow: WorkspaceWindow, win: Window) => {
 		this.registerDomEvent(win, "input", (evt: InputEvent): void => {
@@ -106,4 +136,68 @@ export default class TableCheckboxesPlugin extends Plugin {
 		page = page.replace(new RegExp(`<input type="checkbox" (un)?checked id="${checkboxId}">`), `<input type="checkbox" ${isChecked ? "" : "un"}checked id="${checkboxId}">`);
 		this.app.vault.modify(file, page);
 	}
+
+  private convertAllCheckboxes(): void {
+    console.log(this.settings.convertCheckboxesOutsideTables);
+    const view = this.app.workspace.activeEditor;
+    if (!view || !view.editor) {
+      return;
+    }
+    const page = view.editor.getDoc().getValue();
+    const checkboxes = this.getCheckboxesToConvert(page, this.settings.convertCheckboxesOutsideTables);
+    this.convertCheckboxes(view.editor, checkboxes);
+    console.log(checkboxes);
+  }
+
+  private getCheckboxesToConvert(page: string, convertOutsideTables: boolean) {
+    const checkboxes: { from: EditorPosition, to: EditorPosition }[] = [];
+    const lines = page.split('\n');
+    let lineCount = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      // Skip if we only want table checkboxes and this line isn't in a table
+      if (!convertOutsideTables && !this.isMDCheckboxInTable(line)) {
+        lineCount++;
+        continue;
+      }
+
+      // Find all checkboxes in the line
+      const checkboxRegex = /-\s{0,1}\[\s{0,1}\]/g;
+      let match;
+      
+      while ((match = checkboxRegex.exec(line)) !== null) {
+        const from = {
+          line: lineCount,
+          ch: match.index
+        };
+        const to = {
+          line: lineCount,
+          ch: match.index + match[0].length
+        };
+        checkboxes.push({ from, to });
+      }
+
+      lineCount++;
+    }
+
+    return checkboxes;
+  }
+
+  private convertCheckboxes(editor: Editor, checkboxes: { from: EditorPosition, to: EditorPosition }[]) {
+    const checkboxIds = Array.from({ length: checkboxes.length }, () => this.generateUniqueCheckboxId(editor.getDoc().getValue()));
+    const selections = checkboxes.map((checkbox) => ({
+      anchor: checkbox.from,
+      head: checkbox.to,
+    }));
+    editor.setSelections(selections);
+    // A bit scuffed, but easiest way to replace selections without having to recalculate the position of the cursor every time
+    editor.replaceSelection("!!PLACEHOLDER_TO_BE_REPLACED_WITH_CHECKBOX!!");
+    let page = editor.getDoc().getValue();
+    checkboxIds.forEach((id) => {
+      page = page.replace(/!!PLACEHOLDER_TO_BE_REPLACED_WITH_CHECKBOX!!/, `<input type="checkbox" unchecked id="${id}">`);
+    });
+    editor.getDoc().setValue(page);
+  }
 }
