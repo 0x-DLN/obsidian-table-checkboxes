@@ -1,4 +1,4 @@
-import { EditorPosition, MarkdownFileInfo, Plugin, TFile, WorkspaceWindow } from 'obsidian';
+import { Editor, EditorPosition, Plugin, TFile, WorkspaceWindow } from 'obsidian';
 
 export default class TableCheckboxesPlugin extends Plugin {
 	async onload() {
@@ -12,26 +12,24 @@ export default class TableCheckboxesPlugin extends Plugin {
 
 	private setupWindowHandlers = (_workspaceWindow: WorkspaceWindow, win: Window) => {
 		this.registerDomEvent(win, "input", (evt: InputEvent): void => {
-			if (evt.data === "]") {
-				const view = this.app.workspace.activeEditor;
-				if (!view || !view.editor) {
-					return;
-				}
-				const location = view.editor.getCursor("anchor");
-				location.ch += 1; // Increase char by one because Obsidian autocompletes checkboxes now
-				const rowValue = view.editor.getLine(location.line);
-				if (this.isMDCheckboxInTable(rowValue)) {
-					return this.handleCheckboxReplacement(view, rowValue, location, false);
-				} // else we add the ] manually and check again, just in case for other locales
+			if (evt.data !== "]") {
+        return;
+      }
+      const view = this.app.workspace.activeEditor;
+      if (!view || !view.editor) {
+        return;
+      }
 
-				location.ch -= 1; // Reduce by 1 because we previously added it.
-				const rowChars = rowValue.split(""); // In this case rowValue isn't up to date with the input event, we need to add ] manually.
-				rowChars.splice(location.ch, 0, evt.data); // Luckily we know exactly where ] needs to go
-				const newRowValue = rowChars.join("");
-				if (this.isMDCheckboxInTable(newRowValue)) {
-					this.handleCheckboxReplacement(view, newRowValue, location, true);
-				}
-			}
+      const location = view.editor.getCursor("anchor");
+      const rowValue = view.editor.getLine(location.line);
+      if (!this.isMDCheckboxInTable(rowValue) || this.closingBracketIsTooFar(rowValue, location.ch)) {
+        return;
+      }
+      const checkbox = this.getCheckboxLength(rowValue, location.ch);
+      if (!checkbox) {
+        return;
+      }
+      this.handleCheckboxReplacement(view.editor, location, checkbox);
 		});
 
 		this.registerDomEvent(win, "change", async (evt: InputEvent): Promise<void> => {
@@ -51,17 +49,14 @@ export default class TableCheckboxesPlugin extends Plugin {
 		});
 	}
 
-	private handleCheckboxReplacement (view: MarkdownFileInfo, rowValue: string, location: EditorPosition, manuallyAdded: boolean) {
-		if (!view.editor) { return; }
-		const checkBox = this.getCheckboxLength(rowValue);
-		const start = {...location}; // Shallow copy
-		start.ch -= checkBox.length; // Subtract the length from the location of ']'
-		if (manuallyAdded) {
-			start.ch += 1;
-		}
-		view.editor.setSelection(start, location); // Select '-[]'
-		const checkboxId = this.generateUniqueCheckboxId(view.editor.getDoc().getValue());
-		view.editor.replaceSelection(`<input type="checkbox" unchecked id="${checkboxId}">`); // Replace selection with unchecked HTML checkbox
+	private handleCheckboxReplacement (editor: Editor, location: EditorPosition, checkbox: string) {
+    const completeCheckbox = checkbox.endsWith("]");
+    location.ch = completeCheckbox ? location.ch + 1 : location.ch;
+    const start = {...location}; // Shallow copy
+    start.ch -= checkbox.length;
+    editor.setSelection(start, location); // Select checkbox
+    const checkboxId = this.generateUniqueCheckboxId(editor.getDoc().getValue());
+    editor.replaceSelection(`<input type="checkbox" unchecked id="${checkboxId}">`); // Replace selection with unchecked HTML checkbox
 	}
 
 	private generateUniqueCheckboxId(page: string): string {
@@ -77,20 +72,34 @@ export default class TableCheckboxesPlugin extends Plugin {
 		return idIndex !== -1;
 	}
 
-	private isMDCheckboxInTable(viewData: string): boolean {
+	private isMDCheckboxInTable(rowValue: string): boolean {
 		// Regex to check if markdown checkbox is inside table
-		const tableRegex = /^(\s|>)*\|.*-[\s]?\[[\s]?\].*/m;
-		if (viewData.match(tableRegex)) {
+		const tableRegex = /^(\s|>)*\|.*-\s?(?:\[\s?\]|\[).*/m;
+		if (rowValue.match(tableRegex)) {
 			return true;
 		}
 		return false;
 	}
 
+
+  private closingBracketIsTooFar(rowValue: string, ch: number): boolean {
+    if (rowValue[ch-1] === "[" || rowValue[ch-2] === "[") {
+      return false;
+    }
+    return true;
+  }
+
 	// Allow for different amounts of whitespace
-	private getCheckboxLength(viewData: string): string {
-		const checkboxRegex = /-[\s]?\[[\s]?\]/;
-		const checkboxMatch = viewData.match(checkboxRegex);
-		return checkboxMatch![0];
+	private getCheckboxLength(viewData: string, ch: number): string | null {
+    const completeCheckbox = viewData[ch] === "]";
+    // Some fuckery with the position of the cursor due to the autocomplete option in Obsidian
+    const areaToCheck = viewData.slice(ch-4, completeCheckbox ? ch + 1 : ch);
+		const checkboxRegex = /-\s{0,1}\[\s{0,1}\]?/;
+		const checkboxMatch = areaToCheck.match(checkboxRegex);
+    if (!checkboxMatch) {
+      return null;
+    }
+    return checkboxMatch[0];
 	}
 
 	private toggleCheckbox(page: string, file: TFile, isChecked: boolean, checkboxId: string): void {
