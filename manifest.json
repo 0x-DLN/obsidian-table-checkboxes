@@ -1,9 +1,9 @@
 {
 	"id": "table-checkboxes",
 	"name": "Markdown table checkboxes",
-	"version": "2.0.8",
-	"minAppVersion": "1.5.0",
+  "version": "3.0.0",
+	"minAppVersion": "1.7.0",
 	"description": "Converts markdown checkboxes in tables to HTML, and reflects the state upon (un)checking them.",
-	"author": "Dylan Giesberts",
+	"author": "0x-DLN",
 	"isDesktopOnly": false
 }

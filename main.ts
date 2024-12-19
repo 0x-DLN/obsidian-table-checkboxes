@@ -25,6 +25,13 @@ export default class TableCheckboxesPlugin extends Plugin {
         this.convertAllCheckboxes();
       }
     });
+    this.addCommand({
+      id: "regenerate-checkbox-ids",
+      name: "Regenerate all checkbox IDs",
+      callback: () => {
+        this.regenerateCheckboxIds();
+      }
+    });
     this.addSettingTab(new TableCheckboxesPluginSettingsTab(this.app, this));
 	}
 
@@ -138,7 +145,6 @@ export default class TableCheckboxesPlugin extends Plugin {
 	}
 
   private convertAllCheckboxes(): void {
-    console.log(this.settings.convertCheckboxesOutsideTables);
     const view = this.app.workspace.activeEditor;
     if (!view || !view.editor) {
       return;
@@ -146,7 +152,6 @@ export default class TableCheckboxesPlugin extends Plugin {
     const page = view.editor.getDoc().getValue();
     const checkboxes = this.getCheckboxesToConvert(page, this.settings.convertCheckboxesOutsideTables);
     this.convertCheckboxes(view.editor, checkboxes);
-    console.log(checkboxes);
   }
 
   private getCheckboxesToConvert(page: string, convertOutsideTables: boolean) {
@@ -199,5 +204,24 @@ export default class TableCheckboxesPlugin extends Plugin {
       page = page.replace(/!!PLACEHOLDER_TO_BE_REPLACED_WITH_CHECKBOX!!/, `<input type="checkbox" unchecked id="${id}">`);
     });
     editor.getDoc().setValue(page);
+  }
+
+  private regenerateCheckboxIds(): void {
+    const view = this.app.workspace.activeEditor;
+    if (!view || !view.editor) {
+      return;
+    }
+    let page = view.editor.getDoc().getValue();
+    const checkboxRegex = /<input type="checkbox"[^>]*id="[^"]*"[^>]*>/g;
+    let match;
+    
+    while ((match = checkboxRegex.exec(page)) !== null) {
+      const oldCheckbox = match[0];
+      const newId = this.generateUniqueCheckboxId(page);
+      const newCheckbox = oldCheckbox.replace(/id="[^"]*"/, `id="${newId}"`);
+      page = page.replace(oldCheckbox, newCheckbox);
+    }
+
+    view.editor.setValue(page);
   }
 }
